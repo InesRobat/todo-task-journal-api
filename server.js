@@ -21,7 +21,6 @@ app.use(express.json());
 
 const tasksFilePath = path.join(__dirname, "./tasks.json");
 
-// Fonction pour récupérer les tâches
 const getTasks = () => {
   if (fs.existsSync(tasksFilePath)) {
     const data = fs.readFileSync(tasksFilePath, "utf8");
@@ -31,25 +30,29 @@ const getTasks = () => {
   }
 };
 
-// Fonction pour sauvegarder les tâches
 const saveTasks = (tasks) => {
   fs.writeFileSync(tasksFilePath, JSON.stringify(tasks, null, 2), "utf8");
 };
 
+// Default route redirecting to /health
+app.get("/", (req, res) => {
+  res.redirect("/health");
+});
+
 // ✅ Route Health Check
-app.get("/api/health", (req, res) => {
+app.get("/health", (req, res) => {
   console.log("Health check hit! ✅");
   res.status(200).json({ status: "API is running smoothly 🚀" });
 });
 
-// ✅ Récupérer toutes les tâches
-app.get("/api/tasks", (req, res) => {
+// ✅ Get all tasks
+app.get("/tasks", (req, res) => {
   const tasks = getTasks();
   res.status(200).json(tasks);
 });
 
-// ✅ Ajouter une nouvelle tâche
-app.post("/api/tasks", (req, res) => {
+// ✅ Add a new task
+app.post("/tasks", (req, res) => {
   const tasks = getTasks();
   const { name, completed, date } = req.body;
 
@@ -70,8 +73,8 @@ app.post("/api/tasks", (req, res) => {
   res.status(201).json(newTask);
 });
 
-// ✅ Modifier une tâche existante
-app.put("/api/tasks/:id", (req, res) => {
+// ✅ Update a task
+app.put("/tasks/:id", (req, res) => {
   const tasks = getTasks();
   const taskIndex = tasks.findIndex(
     (task) => task.id === parseInt(req.params.id)
@@ -92,8 +95,8 @@ app.put("/api/tasks/:id", (req, res) => {
   }
 });
 
-// ✅ Supprimer une tâche
-app.delete("/api/tasks/:id", (req, res) => {
+// ✅ Delete a task
+app.delete("/tasks/:id", (req, res) => {
   const tasks = getTasks();
   const taskIndex = tasks.findIndex(
     (task) => task.id === parseInt(req.params.id)
@@ -107,8 +110,6 @@ app.delete("/api/tasks/:id", (req, res) => {
     res.status(404).json({ error: "Task not found" });
   }
 });
-
-// 🚨 Supprime `app.listen(port, ...)` pour Vercel
 
 app.listen(port, () => {
   console.log(`API running on http://localhost:${port}`);

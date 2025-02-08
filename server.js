@@ -38,16 +38,26 @@ MongoClient.connect(mongoUri)
   });
 
 // ✅ Route Health Check
-app.get("/health", (req, res) => {
+app.get("/", (req, res) => {
   res.status(200).json({ status: "API is running smoothly 🚀" });
 });
 
 // ✅ Get all tasks
 app.get("/tasks", async (req, res) => {
   try {
+    console.log("🔍 Fetching tasks from MongoDB...");
+
+    if (!tasksCollection) {
+      console.error("❌ tasksCollection is undefined!");
+      return res.status(500).json({ error: "Database not connected" });
+    }
+
     const tasks = await tasksCollection.find().toArray();
+    console.log("✅ Fetched tasks:", tasks);
+
     res.status(200).json(tasks);
   } catch (err) {
+    console.error("❌ Error fetching tasks:", err);
     res.status(500).json({ error: "Failed to fetch tasks" });
   }
 });

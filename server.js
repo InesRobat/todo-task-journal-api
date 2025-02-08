@@ -19,14 +19,83 @@ app.use(
 
 app.use(express.json());
 
-const tasksFilePath = path.join(__dirname, "./tasks.json");
+const tasksFilePath = path.join(__dirname, "public", "tasks.json"); // Path to public folder
 
+// Get tasks from the public tasks.json or initialize default tasks
 const getTasks = () => {
   if (fs.existsSync(tasksFilePath)) {
     const data = fs.readFileSync(tasksFilePath, "utf8");
     return JSON.parse(data);
   } else {
-    return [];
+    // Default tasks if no file exists
+    const defaultTasks = [
+      {
+        id: 1,
+        name: "Book flight tickets",
+        completed: false,
+        date: "2025-06-10",
+      },
+      {
+        id: 2,
+        name: "Pack luggage",
+        completed: false,
+        date: "2025-06-12",
+      },
+      {
+        id: 3,
+        name: "Buy travel essentials",
+        completed: false,
+        date: "2025-06-11",
+      },
+      {
+        id: 4,
+        name: "Check passport validity",
+        completed: true,
+        date: "2025-06-05",
+      },
+      {
+        id: 5,
+        name: "Confirm hotel reservation",
+        completed: false,
+        date: "2025-06-09",
+      },
+      {
+        id: 6,
+        name: "Plan travel itinerary",
+        completed: true,
+        date: "2025-06-07",
+      },
+      {
+        id: 7,
+        name: "Arrange airport transportation",
+        completed: false,
+        date: "2025-06-08",
+      },
+      {
+        id: 8,
+        name: "Exchange currency",
+        completed: false,
+        date: "2025-06-06",
+      },
+      {
+        id: 9,
+        name: "Buy travel insurance",
+        completed: true,
+        date: "2025-06-04",
+      },
+      {
+        id: 10,
+        name: "Set up vacation auto-replies",
+        completed: false,
+        date: "2025-06-09",
+      },
+    ];
+    fs.writeFileSync(
+      tasksFilePath,
+      JSON.stringify(defaultTasks, null, 2),
+      "utf8"
+    );
+    return defaultTasks;
   }
 };
 

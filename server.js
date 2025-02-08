@@ -42,6 +42,16 @@ app.get("/", (req, res) => {
   res.status(200).json({ status: "API is running smoothly 🚀" });
 });
 
+app.get("/debug", (req, res) => {
+  res.json({
+    NODE_ENV: process.env.NODE_ENV || "Not Set",
+    MONGO_URI: process.env.MONGO_URI ? "Loaded ✅" : "Not Loaded ❌",
+    VERCEL_REGION: process.env.VERCEL_REGION || "Unknown",
+    VERCEL_URL: process.env.VERCEL_URL || "Unknown",
+    DATABASE_CONNECTED: tasksCollection ? "Yes ✅" : "No ❌",
+  });
+});
+
 // ✅ Get all tasks
 app.get("/tasks", async (req, res) => {
   try {

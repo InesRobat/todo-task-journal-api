@@ -1,15 +1,17 @@
 const express = require("express");
-const { MongoClient } = require("mongodb");
+const { MongoClient, ObjectId } = require("mongodb");
 const cors = require("cors");
+require("dotenv").config();
 
 const app = express();
 const port = 5000;
 
 // MongoDB URI (Replace with your actual MongoDB URI)
-const mongoUri = process.env.MONGO_URI; // Make sure you set this in your environment variables
+const mongoUri = process.env.MONGO_URI;
 
 let db, tasksCollection;
 
+// Middleware
 app.use(
   cors({
     origin: ["http://localhost:8080", "https://todo-task-journal.vercel.app"],
@@ -20,14 +22,16 @@ app.use(
 app.use(express.json());
 
 // Connect to MongoDB
-MongoClient.connect(mongoUri, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
+MongoClient.connect(mongoUri)
   .then((client) => {
-    db = client.db("taskDB"); // Use a database named taskDB
-    tasksCollection = db.collection("tasks"); // Use a collection named tasks
+    db = client.db("taskDB");
+    tasksCollection = db.collection("tasks");
     console.log("Connected to MongoDB");
+
+    // Start the server after the database connection is successful
+    app.listen(port, () => {
+      console.log(`API running on http://localhost:${port}`);
+    });
   })
   .catch((err) => {
     console.error("Error connecting to MongoDB", err);
@@ -77,7 +81,7 @@ app.put("/tasks/:id", async (req, res) => {
 
   try {
     const result = await tasksCollection.updateOne(
-      { _id: new MongoClient.ObjectId(id) },
+      { _id: new ObjectId(id) },
       { $set: { completed, date } }
     );
 
@@ -97,7 +101,7 @@ app.delete("/tasks/:id", async (req, res) => {
 
   try {
     const result = await tasksCollection.deleteOne({
-      _id: new MongoClient.ObjectId(id),
+      _id: new ObjectId(id),
     });
 
     if (result.deletedCount === 0) {
@@ -108,10 +112,6 @@ app.delete("/tasks/:id", async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: "Failed to delete task" });
   }
-});
-
-app.listen(port, () => {
-  console.log(`API running on http://localhost:${port}`);
 });
 
 module.exports = app;

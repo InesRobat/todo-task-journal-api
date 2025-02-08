@@ -1,128 +1,55 @@
 const express = require("express");
-const fs = require("fs");
-const path = require("path");
+const { MongoClient } = require("mongodb");
 const cors = require("cors");
-const port = 5000;
 
 const app = express();
+const port = 5000;
+
+// MongoDB URI (Replace with your actual MongoDB URI)
+const mongoUri = process.env.MONGO_URI; // Make sure you set this in your environment variables
+
+let db, tasksCollection;
 
 app.use(
   cors({
-    origin: [
-      "http://localhost:8080",
-      "https://todo-task-journal.vercel.app",
-      "http://localhost:3000",
-    ],
+    origin: ["http://localhost:8080", "https://todo-task-journal.vercel.app"],
     allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
 
 app.use(express.json());
 
-const tasksFilePath = path.join(__dirname, "public", "tasks.json"); // Path to public folder
-
-// Get tasks from the public tasks.json or initialize default tasks
-const getTasks = () => {
-  if (fs.existsSync(tasksFilePath)) {
-    const data = fs.readFileSync(tasksFilePath, "utf8");
-    return JSON.parse(data);
-  } else {
-    // Default tasks if no file exists
-    const defaultTasks = [
-      {
-        id: 1,
-        name: "Book flight tickets",
-        completed: false,
-        date: "2025-06-10",
-      },
-      {
-        id: 2,
-        name: "Pack luggage",
-        completed: false,
-        date: "2025-06-12",
-      },
-      {
-        id: 3,
-        name: "Buy travel essentials",
-        completed: false,
-        date: "2025-06-11",
-      },
-      {
-        id: 4,
-        name: "Check passport validity",
-        completed: true,
-        date: "2025-06-05",
-      },
-      {
-        id: 5,
-        name: "Confirm hotel reservation",
-        completed: false,
-        date: "2025-06-09",
-      },
-      {
-        id: 6,
-        name: "Plan travel itinerary",
-        completed: true,
-        date: "2025-06-07",
-      },
-      {
-        id: 7,
-        name: "Arrange airport transportation",
-        completed: false,
-        date: "2025-06-08",
-      },
-      {
-        id: 8,
-        name: "Exchange currency",
-        completed: false,
-        date: "2025-06-06",
-      },
-      {
-        id: 9,
-        name: "Buy travel insurance",
-        completed: true,
-        date: "2025-06-04",
-      },
-      {
-        id: 10,
-        name: "Set up vacation auto-replies",
-        completed: false,
-        date: "2025-06-09",
-      },
-    ];
-    fs.writeFileSync(
-      tasksFilePath,
-      JSON.stringify(defaultTasks, null, 2),
-      "utf8"
-    );
-    return defaultTasks;
-  }
-};
-
-const saveTasks = (tasks) => {
-  fs.writeFileSync(tasksFilePath, JSON.stringify(tasks, null, 2), "utf8");
-};
-
-// Default route redirecting to /health
-app.get("/", (req, res) => {
-  res.redirect("/health");
-});
+// Connect to MongoDB
+MongoClient.connect(mongoUri, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+})
+  .then((client) => {
+    db = client.db("taskDB"); // Use a database named taskDB
+    tasksCollection = db.collection("tasks"); // Use a collection named tasks
+    console.log("Connected to MongoDB");
+  })
+  .catch((err) => {
+    console.error("Error connecting to MongoDB", err);
+  });
 
 // ✅ Route Health Check
 app.get("/health", (req, res) => {
-  console.log("Health check hit! ✅");
   res.status(200).json({ status: "API is running smoothly 🚀" });
 });
 
 // ✅ Get all tasks
-app.get("/tasks", (req, res) => {
-  const tasks = getTasks();
-  res.status(200).json(tasks);
+app.get("/tasks", async (req, res) => {
+  try {
+    const tasks = await tasksCollection.find().toArray();
+    res.status(200).json(tasks);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch tasks" });
+  }
 });
 
 // ✅ Add a new task
-app.post("/tasks", (req, res) => {
-  const tasks = getTasks();
+app.post("/tasks", async (req, res) => {
   const { name, completed, date } = req.body;
 
   if (!name || !date) {
@@ -130,53 +57,56 @@ app.post("/tasks", (req, res) => {
   }
 
   const newTask = {
-    id: tasks.length > 0 ? tasks[tasks.length - 1].id + 1 : 1,
     name,
     completed: completed || false,
     date,
   };
 
-  tasks.push(newTask);
-  saveTasks(tasks);
-
-  res.status(201).json(newTask);
+  try {
+    const result = await tasksCollection.insertOne(newTask);
+    res.status(201).json({ id: result.insertedId, ...newTask });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to add task" });
+  }
 });
 
 // ✅ Update a task
-app.put("/tasks/:id", (req, res) => {
-  const tasks = getTasks();
-  const taskIndex = tasks.findIndex(
-    (task) => task.id === parseInt(req.params.id)
-  );
+app.put("/tasks/:id", async (req, res) => {
+  const { id } = req.params;
+  const { completed, date } = req.body;
 
-  if (taskIndex !== -1) {
-    const { completed, date } = req.body;
-    if (completed !== undefined) {
-      tasks[taskIndex].completed = completed;
+  try {
+    const result = await tasksCollection.updateOne(
+      { _id: new MongoClient.ObjectId(id) },
+      { $set: { completed, date } }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ error: "Task not found" });
     }
-    if (date) {
-      tasks[taskIndex].date = date;
-    }
-    saveTasks(tasks);
-    res.json(tasks[taskIndex]);
-  } else {
-    res.status(404).json({ error: "Task not found" });
+
+    res.status(200).json({ id, completed, date });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to update task" });
   }
 });
 
 // ✅ Delete a task
-app.delete("/tasks/:id", (req, res) => {
-  const tasks = getTasks();
-  const taskIndex = tasks.findIndex(
-    (task) => task.id === parseInt(req.params.id)
-  );
+app.delete("/tasks/:id", async (req, res) => {
+  const { id } = req.params;
 
-  if (taskIndex !== -1) {
-    tasks.splice(taskIndex, 1);
-    saveTasks(tasks);
+  try {
+    const result = await tasksCollection.deleteOne({
+      _id: new MongoClient.ObjectId(id),
+    });
+
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ error: "Task not found" });
+    }
+
     res.status(204).send();
-  } else {
-    res.status(404).json({ error: "Task not found" });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to delete task" });
   }
 });
 

@@ -1,0 +1,62 @@
+[
+  {
+    "id": 1,
+    "name": "Book flight tickets",
+    "completed": false,
+    "date": "2025-06-10"
+  },
+  {
+    "id": 2,
+    "name": "Pack luggage",
+    "completed": false,
+    "date": "2025-06-12"
+  },
+  {
+    "id": 3,
+    "name": "Buy travel essentials",
+    "completed": false,
+    "date": "2025-06-11"
+  },
+  {
+    "id": 4,
+    "name": "Check passport validity",
+    "completed": true,
+    "date": "2025-06-05"
+  },
+  {
+    "id": 5,
+    "name": "Confirm hotel reservation",
+    "completed": false,
+    "date": "2025-06-09"
+  },
+  {
+    "id": 6,
+    "name": "Plan travel itinerary",
+    "completed": true,
+    "date": "2025-06-07"
+  },
+  {
+    "id": 7,
+    "name": "Arrange airport transportation",
+    "completed": false,
+    "date": "2025-06-08"
+  },
+  {
+    "id": 8,
+    "name": "Exchange currency",
+    "completed": false,
+    "date": "2025-06-06"
+  },
+  {
+    "id": 9,
+    "name": "Buy travel insurance",
+    "completed": true,
+    "date": "2025-06-04"
+  },
+  {
+    "id": 10,
+    "name": "Set up vacation auto-replies",
+    "completed": false,
+    "date": "2025-06-09"
+  }
+]

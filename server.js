@@ -11,8 +11,9 @@ const port = 5000;
 const mongoUri = process.env.MONGO_URI;
 const secretKey = process.env.JWT_SECRET;
 
-let db, tasksCollection;
 let client;
+let db;
+let tasksCollection;
 
 // Middleware
 app.use(
@@ -24,47 +25,54 @@ app.use(
 
 app.use(express.json());
 
-// Function to connect to MongoDB
+// ** Function to connect to MongoDB **
 async function connectToDatabase() {
+  if (client && client.topology && client.topology.isConnected()) {
+    console.log("✅ Already connected to MongoDB");
+    return client;
+  }
+
   try {
     client = new MongoClient(mongoUri, {
-      useUnifiedTopology: true, // Enable the new connection management engine
+      useUnifiedTopology: true,
     });
 
     await client.connect();
     db = client.db("taskDB");
     tasksCollection = db.collection("tasks");
-    console.log("Connected to MongoDB");
+    console.log("✅ Connected to MongoDB");
 
-    // Monitor if the connection is closed
-    client.on("close", () => {
-      console.log("MongoDB connection closed. Reconnecting...");
-      connectToDatabase(); // Reconnect if the connection drops
+    // Handle connection close and attempt reconnection
+    client.on("close", async () => {
+      console.error("❌ MongoDB connection lost. Reconnecting...");
+      await connectToDatabase();
     });
 
-    // Start the server after the database connection is successful
-    app.listen(port, () => {
-      console.log(`API running on http://localhost:${port}`);
-    });
+    return client;
   } catch (err) {
-    console.error("Error connecting to MongoDB", err);
-    setTimeout(connectToDatabase, 5000); // Retry after 5 seconds if connection fails
+    console.error("❌ Error connecting to MongoDB:", err);
+    setTimeout(connectToDatabase, 5000); // Retry after 5 seconds
   }
 }
 
-// Initial database connection
-connectToDatabase();
+// ** Ensure the database is connected before handling requests **
+app.use(async (req, res, next) => {
+  if (!client || !client.topology || !client.topology.isConnected()) {
+    console.log("🔄 Reconnecting to MongoDB before processing request...");
+    await connectToDatabase();
+  }
+  next();
+});
 
-// ✅ Route Health Check
+// ✅ Health Check Route
 app.get("/", (req, res) => {
   res.status(200).json({ status: "API is running smoothly 🚀" });
 });
 
-// Route to generate JWT for an anonymous user
+// ✅ Route to generate JWT for anonymous user
 app.get("/generate-jwt", (req, res) => {
   const anonymousUserId = `user-${Math.floor(Math.random() * 1000000)}`;
 
-  // Create a JWT token with an anonymous user identifier
   const token = jwt.sign({ userId: anonymousUserId }, secretKey, {
     expiresIn: "1h",
   });
@@ -72,15 +80,15 @@ app.get("/generate-jwt", (req, res) => {
   res.json({ token });
 });
 
-// Middleware to authenticate and verify JWT token
+// ✅ Middleware to verify JWT token
 function authenticateJWT(req, res, next) {
-  const token = req.headers["authorization"]?.split(" ")[1]; // Get the token from the "Authorization" header
+  const token = req.headers["authorization"]?.split(" ")[1];
 
   if (!token) return res.status(403).send("Access denied.");
 
   jwt.verify(token, secretKey, (err, decoded) => {
     if (err) return res.status(403).send("Invalid token");
-    req.userId = decoded.userId; // Add the userId from the decoded JWT
+    req.userId = decoded.userId;
     next();
   });
 }
@@ -91,6 +99,7 @@ app.get("/tasks", authenticateJWT, async (req, res) => {
     const tasks = await tasksCollection.find({ userId: req.userId }).toArray();
     res.status(200).json(tasks);
   } catch (err) {
+    console.error("❌ Error fetching tasks:", err);
     res.status(500).json({ error: "Failed to fetch tasks" });
   }
 });
@@ -107,13 +116,14 @@ app.post("/tasks", authenticateJWT, async (req, res) => {
     name,
     completed: completed || false,
     date,
-    userId: req.userId, // Associate this task with the userId from JWT
+    userId: req.userId,
   };
 
   try {
     const result = await tasksCollection.insertOne(newTask);
     res.status(201).json({ id: result.insertedId, ...newTask });
   } catch (err) {
+    console.error("❌ Error adding task:", err);
     res.status(500).json({ error: "Failed to add task" });
   }
 });
@@ -125,7 +135,7 @@ app.put("/tasks/:id", authenticateJWT, async (req, res) => {
 
   try {
     const result = await tasksCollection.updateOne(
-      { _id: new ObjectId(id), userId: req.userId }, // Ensure the userId matches
+      { _id: new ObjectId(id), userId: req.userId },
       { $set: { completed, date } }
     );
 
@@ -135,6 +145,7 @@ app.put("/tasks/:id", authenticateJWT, async (req, res) => {
 
     res.status(200).json({ id, completed, date });
   } catch (err) {
+    console.error("❌ Error updating task:", err);
     res.status(500).json({ error: "Failed to update task" });
   }
 });
@@ -146,7 +157,7 @@ app.delete("/tasks/:id", authenticateJWT, async (req, res) => {
   try {
     const result = await tasksCollection.deleteOne({
       _id: new ObjectId(id),
-      userId: req.userId, // Ensure the userId matches
+      userId: req.userId,
     });
 
     if (result.deletedCount === 0) {
@@ -155,8 +166,16 @@ app.delete("/tasks/:id", authenticateJWT, async (req, res) => {
 
     res.status(204).send();
   } catch (err) {
+    console.error("❌ Error deleting task:", err);
     res.status(500).json({ error: "Failed to delete task" });
   }
+});
+
+// ✅ Start Server AFTER connecting to MongoDB
+connectToDatabase().then(() => {
+  app.listen(port, () => {
+    console.log(`🚀 API running on http://localhost:${port}`);
+  });
 });
 
 module.exports = app;

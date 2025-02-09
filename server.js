@@ -1,15 +1,18 @@
 const express = require("express");
 const { MongoClient, ObjectId } = require("mongodb");
+const jwt = require("jsonwebtoken");
 const cors = require("cors");
 require("dotenv").config();
 
 const app = express();
 const port = 5000;
 
-// MongoDB URI (Replace with your actual MongoDB URI)
+// MongoDB URI (replace with your actual MongoDB URI)
 const mongoUri = process.env.MONGO_URI;
+const secretKey = process.env.JWT_SECRET;
 
 let db, tasksCollection;
+let client;
 
 // Middleware
 app.use(
@@ -21,86 +24,79 @@ app.use(
 
 app.use(express.json());
 
-// Connect to MongoDB
-MongoClient.connect(mongoUri)
-  .then((client) => {
+// Function to connect to MongoDB
+async function connectToDatabase() {
+  try {
+    client = new MongoClient(mongoUri, {
+      useUnifiedTopology: true, // Enable the new connection management engine
+    });
+
+    await client.connect();
     db = client.db("taskDB");
     tasksCollection = db.collection("tasks");
     console.log("Connected to MongoDB");
+
+    // Monitor if the connection is closed
+    client.on("close", () => {
+      console.log("MongoDB connection closed. Reconnecting...");
+      connectToDatabase(); // Reconnect if the connection drops
+    });
 
     // Start the server after the database connection is successful
     app.listen(port, () => {
       console.log(`API running on http://localhost:${port}`);
     });
-  })
-  .catch((err) => {
+  } catch (err) {
     console.error("Error connecting to MongoDB", err);
-  });
+    setTimeout(connectToDatabase, 5000); // Retry after 5 seconds if connection fails
+  }
+}
+
+// Initial database connection
+connectToDatabase();
 
 // ✅ Route Health Check
 app.get("/", (req, res) => {
   res.status(200).json({ status: "API is running smoothly 🚀" });
 });
 
-app.get("/debug", (req, res) => {
-  res.json({
-    NODE_ENV: process.env.NODE_ENV || "Not Set",
-    MONGO_URI: process.env.MONGO_URI ? "Loaded ✅" : "Not Loaded ❌",
-    VERCEL_REGION: process.env.VERCEL_REGION || "Unknown",
-    VERCEL_URL: process.env.VERCEL_URL || "Unknown",
-    DATABASE_CONNECTED: tasksCollection ? "Yes ✅" : "No ❌",
+// Route to generate JWT for an anonymous user
+app.get("/generate-jwt", (req, res) => {
+  const anonymousUserId = `user-${Math.floor(Math.random() * 1000000)}`;
+
+  // Create a JWT token with an anonymous user identifier
+  const token = jwt.sign({ userId: anonymousUserId }, secretKey, {
+    expiresIn: "1h",
   });
+
+  res.json({ token });
 });
 
-app.get("/test-mongo", async (req, res) => {
+// Middleware to authenticate and verify JWT token
+function authenticateJWT(req, res, next) {
+  const token = req.headers["authorization"]?.split(" ")[1]; // Get the token from the "Authorization" header
+
+  if (!token) return res.status(403).send("Access denied.");
+
+  jwt.verify(token, secretKey, (err, decoded) => {
+    if (err) return res.status(403).send("Invalid token");
+    req.userId = decoded.userId; // Add the userId from the decoded JWT
+    next();
+  });
+}
+
+// ✅ Get all tasks for the authenticated user
+app.get("/tasks", authenticateJWT, async (req, res) => {
   try {
-    console.log("🔍 Testing MongoDB connection...");
-
-    // Connect to MongoDB inside the route
-    const client = new MongoClient(process.env.MONGO_URI);
-    await client.connect();
-
-    const db = client.db("taskDB");
-    const testCollection = db.collection("tasks");
-
-    // Fetch 1 task as a test
-    const testTask = await testCollection.findOne();
-
-    res.json({
-      success: true,
-      message: "Connected to MongoDB successfully!",
-      testTask: testTask || "No tasks found",
-    });
-
-    await client.close();
-  } catch (error) {
-    console.error("❌ MongoDB Connection Test Failed:", error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// ✅ Get all tasks
-app.get("/tasks", async (req, res) => {
-  try {
-    console.log("🔍 Fetching tasks from MongoDB...");
-
-    if (!tasksCollection) {
-      console.error("❌ tasksCollection is undefined!");
-      return res.status(500).json({ error: "Database not connected" });
-    }
-
-    const tasks = await tasksCollection.find().toArray();
-    console.log("✅ Fetched tasks:", tasks);
-
+    const tasks = await tasksCollection.find({ userId: req.userId }).toArray();
     res.status(200).json(tasks);
   } catch (err) {
-    console.error("❌ Error fetching tasks:", err);
     res.status(500).json({ error: "Failed to fetch tasks" });
   }
 });
 
-// ✅ Add a new task
-app.post("/tasks", async (req, res) => {
+// ✅ Add a new task for the authenticated user
+app.post("/tasks", authenticateJWT, async (req, res) => {
   const { name, completed, date } = req.body;
 
   if (!name || !date) {
@@ -111,6 +107,7 @@ app.post("/tasks", async (req, res) => {
     name,
     completed: completed || false,
     date,
+    userId: req.userId, // Associate this task with the userId from JWT
   };
 
   try {
@@ -121,14 +118,14 @@ app.post("/tasks", async (req, res) => {
   }
 });
 
-// ✅ Update a task
-app.put("/tasks/:id", async (req, res) => {
+// ✅ Update a task for the authenticated user
+app.put("/tasks/:id", authenticateJWT, async (req, res) => {
   const { id } = req.params;
   const { completed, date } = req.body;
 
   try {
     const result = await tasksCollection.updateOne(
-      { _id: new ObjectId(id) },
+      { _id: new ObjectId(id), userId: req.userId }, // Ensure the userId matches
       { $set: { completed, date } }
     );
 
@@ -142,13 +139,14 @@ app.put("/tasks/:id", async (req, res) => {
   }
 });
 
-// ✅ Delete a task
-app.delete("/tasks/:id", async (req, res) => {
+// ✅ Delete a task for the authenticated user
+app.delete("/tasks/:id", authenticateJWT, async (req, res) => {
   const { id } = req.params;
 
   try {
     const result = await tasksCollection.deleteOne({
       _id: new ObjectId(id),
+      userId: req.userId, // Ensure the userId matches
     });
 
     if (result.deletedCount === 0) {

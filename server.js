@@ -52,6 +52,33 @@ app.get("/debug", (req, res) => {
   });
 });
 
+app.get("/test-mongo", async (req, res) => {
+  try {
+    console.log("🔍 Testing MongoDB connection...");
+
+    // Connect to MongoDB inside the route
+    const client = new MongoClient(process.env.MONGO_URI);
+    await client.connect();
+
+    const db = client.db("taskDB");
+    const testCollection = db.collection("tasks");
+
+    // Fetch 1 task as a test
+    const testTask = await testCollection.findOne();
+
+    res.json({
+      success: true,
+      message: "Connected to MongoDB successfully!",
+      testTask: testTask || "No tasks found",
+    });
+
+    await client.close();
+  } catch (error) {
+    console.error("❌ MongoDB Connection Test Failed:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // ✅ Get all tasks
 app.get("/tasks", async (req, res) => {
   try {
